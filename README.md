@@ -19,7 +19,8 @@ This function returns an object that sort of follows the base functionalty of th
 
 The object also includes a batches property, which is an array of SQL batches in the script. The batches then have a statements property, which contains the individual statements that were parsed. The individual statement objects go into more detail about what the statements are, what they do, and what they affect. To get to that info directly, you'd do this with the object you get back:
 
-```$results = Get-ChildItem .\TestScripts | .\Test-SQLScripts.ps1 -Verbose
+```
+$results = Get-ChildItem .\TestScripts | .\Test-SQLScripts.ps1 -Verbose
 $results.Batches.Statements | ft
 
 ScriptName                BatchNumber StatementNumber StatementType Action OnObjectSchema OnObjectName
