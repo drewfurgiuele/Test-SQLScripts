@@ -114,16 +114,10 @@ process {
                 
                 $StatementObject.Action = ($s.ScriptTokenStream | Where-Object {$_.Line -eq $s.StartLine -and $_.Column -eq $s.StartColumn }).Text
                 
-                #$currentType = $s.gettype().name
-                #Write-Verbose "Current type: $CurrentType"
-                #$SchemaSpec = ($ParserKeys | Where-Object {$_.ObjectType -eq $s.gettype().name}).SchemaSpecification
-                #Write-Verbose "Schema spec needed: $SchemaSpec"
-
                 $TallyVariable = ($ParserKeys | Where-Object {$_.ObjectType -eq $s.gettype().name}).TallyVariable
                 if ($TallyVariable -ne "") {
                     $ScriptObject.$TallyVariable++
                 }
-                #$SplitDefinition = $ObjectDefintion.Split(".")
 
                 $Property = $s
                 $SplitDefinition = (($ParserKeys | Where-Object {$_.ObjectType -eq $s.gettype().name}).SchemaSpecification).Split(".")
