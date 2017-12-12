@@ -70,23 +70,24 @@ begin {
     Class ParserKey {
         [string] $ObjectType
         [string] $SchemaSpecification
-        [string] $TallyVariable
-        ParserKey ([string] $ObjectType, [string] $SchemaSpecification, [string] $TallyVariable) {
+        ParserKey ([string] $ObjectType, [string] $SchemaSpecification) {
             $this.ObjectType = $ObjectType
             $this.SchemaSpecification = $SchemaSpecification
-            $this.TallyVariable = $TallyVariable
         }
     }
 
-    $ParserKeys += New-Object Parserkey ("SelectStatement","Queryexpression.Fromclause.Tablereferences.Schemaobject","InsertStatements")
-    $ParserKeys += New-Object Parserkey ("InsertStatement","InsertSpecification.Target.SchemaObject","InsertStatements")
-    $ParserKeys += New-Object Parserkey ("UpdateStatement","UpdateSpecification.Target.SchemaObject","UpdateStatements")
-    $ParserKeys += New-Object Parserkey ("DeleteStatement","DeleteSpecification.Target.SchemaObject","DeleteStatements")
-    $ParserKeys += New-Object Parserkey ("AlterTableAddTableElementStatement","SchemaObjectName",$null)
-    $ParserKeys += New-Object Parserkey ("DropIndexStatement","DropIndexClauses.Object","IndexDrops")
-    $ParserKeys += New-Object Parserkey ("CreateIndexStatement","OnName",$null)
-    $ParserKeys += New-Object Parserkey ("CreateProcedureStatement","ProcedureReference.Name",$null)
-    $ParserKeys += New-Object Parserkey ("DropProcedureStatement","Objects",$null)
+    $ParserKeys += New-Object Parserkey ("SelectStatement","Queryexpression.Fromclause.Tablereferences.Schemaobject")
+    $ParserKeys += New-Object Parserkey ("InsertStatement","InsertSpecification.Target.SchemaObject")
+    $ParserKeys += New-Object Parserkey ("UpdateStatement","UpdateSpecification.Target.SchemaObject")
+    $ParserKeys += New-Object Parserkey ("DeleteStatement","DeleteSpecification.Target.SchemaObject")
+    $ParserKeys += New-Object Parserkey ("AlterTableAddTableElementStatement","SchemaObjectName")
+    $ParserKeys += New-Object Parserkey ("AlterTableDropTableElementStatement","SchemaObjectName")
+    $ParserKeys += New-Object Parserkey ("DropIndexStatement","DropIndexClauses.Object")
+    $ParserKeys += New-Object Parserkey ("CreateIndexStatement","OnName")
+    $ParserKeys += New-Object Parserkey ("CreateProcedureStatement","ProcedureReference.Name")
+    $ParserKeys += New-Object Parserkey ("CreateTableStatement","SchemaObjectName")
+    $ParserKeys += New-Object Parserkey ("DropProcedureStatement","Objects")
+    $ParserKeys += New-Object Parserkey ("DropTableStatement","Objects")
     
 
     function Get-UpdatedTableFromReferences($TableReference) {
@@ -99,27 +100,34 @@ begin {
         }
     }
 
-    function Process-Statement ($Statement, $Keys) {
+    function Get-Statement ($Statement, $Keys) {
         $StatementObject = [PSCustomObject] @{
             PSTypeName = "Parser.DOM.Statement"
             ScriptName = $f.Name
             BatchNumber= $TotalBatches
             StatementNumber = $TotalStatements
+            StatementType = $null
             Action = $null
+            IsQualified = $false
             OnObjectSchema = $null
             OnObjectName = $null
         }
         
         Add-Member -InputObject $StatementObject -Type ScriptMethod -Name ToString -Value { $this.psobject.typenames[0] } -Force
         
-        $StatementObject.Action = ($Statement.ScriptTokenStream | Where-Object {$_.Line -eq $Statement.StartLine -and $_.Column -eq $Statement.StartColumn }).Text
+        $StatementObject.Action = ($Statement.ScriptTokenStream | Where-Object {$_.Line -eq $Statement.StartLine -and $_.Column -eq $Statement.StartColumn}).Text.ToUpper()
 
         if ($statementObject.Action -eq "If") {
             Write-Verbose "Found an an 'IF' statement, looking at the 'THEN' part of the statement..."
-            $SubStatements = $Statement.ThenStatement.StatementList.Statements
-            ForEach ($su in $subStatements) {
-                $StatementObject = Process-Statement $su $keys
+            if ($Statement.ThenStatement.StatementList.Statements.Count -ge 1) {
+                $SubStatements = $Statement.ThenStatement.StatementList.Statements
+                ForEach ($su in $subStatements) {
+                    $StatementObject = Get-Statement $su $keys
+                }
+            } else {
+                $StatementObject = Get-Statement $Statement.ThenStatement $keys
             }
+            $StatementObject.IsQualified = $true
         } else {
             $Property = $Statement
             $ObjectType = ($Keys | Where-Object {$_.ObjectType -eq $Statement.gettype().name}).ObjectType
@@ -134,6 +142,7 @@ begin {
                 $StatementObject.OnObjectName = $SchemaObject.BaseIdentifier.Value
             } else {
                 try {
+                    $StatementObject.StatementType = $Statement.GetType().Name.ToString()
                     $SplitDefinition = (($Keys | Where-Object {$_.ObjectType -eq $Statement.gettype().name}).SchemaSpecification).Split(".")
                     ForEach ($def in $SplitDefinition) {
                         $Property = $Property | Select-Object -ExpandProperty $def
@@ -216,11 +225,6 @@ process {
             NumberOfBatches = $Fragment.Batches.Count
             HasParseErrors = $HasErrors
             Errors = $Errors
-            InsertStatements = 0
-            UpdateStatements = 0
-            DeleteStatements = 0
-            IndexDrops = 0
-            NoWhereClauseWarning = $false
             Batches = @()
         }
 
@@ -243,7 +247,7 @@ process {
             $TotalStatements = 0
             ForEach ($s in $b.Statements) {
                 $TotalStatements++
-                $StatementObject = Process-Statement $s $ParserKeys
+                $StatementObject = Get-Statement $s $ParserKeys
 
                 $BatchObject.Statements += $StatementObject
             }
