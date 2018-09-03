@@ -99,7 +99,19 @@ begin {
             Return $TableReference.SchemaObject
         }
     }
-
+    function Get-UpdatedTableFromQueryDefinedTable($QueryDefinedTable) {
+        Write-Verbose "Looks like a sub query was used, need to get into the sub queries..."
+        If ($QueryDefinedTable.QueryExpression) {
+            Get-UpdatedTableFromQueryDefinedTable $QueryDefinedTable.QueryExpression.FromClause.TableReferences
+        } Else {
+            Write-Verbose "closing recursion..."
+            If ($QueryDefinedTable.FirstTableReference) {
+                Get-UpdatedTableFromReferences $QueryDefinedTable.FirstTableReference
+            } Else {
+                Return $QueryDefinedTable.SchemaObject
+            }
+        }
+    }
     function Get-Statement ($Statement, $Keys) {
         $StatementObject = [PSCustomObject] @{
             PSTypeName = "Parser.DOM.Statement"
@@ -138,6 +150,10 @@ begin {
                 $StatementObject.OnObjectName = $SchemaObject.BaseIdentifier.Value
             } elseif ($ObjectType -eq "SelectStatement" -and $statement.Queryexpression.fromclause.tablereferences.FirstTableReference -ne $null) {
                 $SchemaObject = Get-UpdatedTableFromReferences $statement.Queryexpression.fromclause.tablereferences.FirstTableReference
+                $StatementObject.OnObjectSchema = $SchemaObject.SchemaIdentifier.Value
+                $StatementObject.OnObjectName = $SchemaObject.BaseIdentifier.Value
+            } elseif ($ObjectType -eq "SelectStatement" -and $statement.Queryexpression.FromClause.TableReferences.QueryExpression -ne $null) {
+                $SchemaObject = Get-UpdatedTableFromQueryDefinedTable $statement.QueryExpression.FromClause.TableReferences
                 $StatementObject.OnObjectSchema = $SchemaObject.SchemaIdentifier.Value
                 $StatementObject.OnObjectName = $SchemaObject.BaseIdentifier.Value
             } else {
